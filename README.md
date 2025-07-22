@@ -1,64 +1,56 @@
-# FastBar
+# FastBar: A Spotlight Alternative for Windows
 
-Hi there! 👋 FastBar is a lightweight launcher I built to quickly access my apps on Windows. When you press `Alt + Space`, a small search bar pops up near the top of the screen. Just start typing the name of an app, and FastBar will find and launch it instantly. If nothing matches, it redirects your query to a web search instead. Super simple.
+FastBar is a super simple, super fast app launcher for Windows — kind of like a minimalist Spotlight alternative. Just press `Alt + Space`, type a few letters, and launch anything instantly.
 
-## ✨ Features
+If it’s in your Start Menu, FastBar will find it. If not, it sends your search to the web. That’s it. No bloat, no distractions.
 
-* ⌖ Global shortcut (`Alt + Space`) for instant access anytime.
-* 🗐 Live filtering as you type.
-* 🌐 Falls back to web search (via DuckDuckGo) if no app is found.
-* 💡 Clean, semi-transparent UI with soft shadows.
-* ✨ Runs quietly in the background with minimal resource usage.
+## ✨ What It Does
 
-## 🚀 How It Works
+* ⌖ Pops up with `Alt + Space`
+* 🗐 Live search through your Start Menu shortcuts
+* 🌐 Sends unrecognized queries to DuckDuckGo
+* 💡 Lightweight, transparent UI that stays out of the way
+* ✨ Runs quietly in the background — no tray icons, no fuss
 
-1. On startup, it scans your Start Menu folders for `.lnk` shortcut files.
-2. These are indexed by name and stored internally.
-3. Pressing `Alt + Space` brings up the launcher window.
-4. As you type, matching results are listed instantly.
-5. Press `Enter` to either launch the selected app or perform a web search.
+## ⚙ How It Works
 
-## 📦 Portable by Design
+1. On startup, FastBar indexes `.lnk` shortcut files from your Start Menu.
+2. You press `Alt + Space`, and a search bar fades in.
+3. You type — it filters live.
+4. Hit `Enter` to run the app or search online.
 
-FastBar is completely portable — no installation required. Just run the `.exe` and you're good to go.
+## 📦 Portable By Nature
 
-However, due to Windows security restrictions, **on first startup after boot, you need to click the `.exe` once manually** (e.g., from a shortcut or startup folder). After that, it will keep running quietly in the background and can always be triggered with `Alt + Space`.
+FastBar is 100% portable. Just run the `.exe`. No setup, no registry edits.
 
-## 🛠 Build Your Own (.exe)
+👉 Heads-up: due to Windows restrictions, **after reboot you need to run it manually once** (like from Startup folder). After that, it's ready any time you press `Alt + Space`.
 
-If you want to generate a standalone `.exe` version yourself:
+## 🛠 Want to Build It Yourself?
 
 ```bash
 pyinstaller --onefile --noconsole --icon=fastbaricon.ico --name=FastBar fastbar.py
 ```
 
-The compiled `.exe` will be available under the `dist/` folder. You can share it or add it to your Startup folder for auto-run.
+The `.exe` will be in `dist/`. You can share it, add it to autostart, or keep it on a flash drive.
 
-## 💻 For Developers
+## 🧑‍💻 Dev Mode
 
-If you want to run the code manually:
+Want to run from source?
 
-1. Install dependencies:
+```bash
+pip install pyqt5
+python fastbar.py
+```
 
-   ```bash
-   pip install pyqt5
-   ```
-2. Launch the script:
+## ⚠ Heads Up
 
-   ```bash
-   python fastbar.py
-   ```
-3. Hit `Alt + Space` to toggle the UI.
+* Windows only for now
+* If another app uses `Alt + Space`, you might need to rebind or disable that shortcut
 
-## ⚠ Notes
+## 🤝 Contribute
 
-* Currently works only on Windows.
-* Some systems might already use `Alt + Space` (e.g., accessibility tools). In that case, you may need to free that key combo first.
-
-## 📁 Contributing
-
-Suggestions, issues, or pull requests are very welcome. Ideas like file search, custom themes, alternate search engines — I'd love to see what you come up with.
+Pull requests, ideas, and improvements are always welcome. Themes, fuzzy search, multi-language — sky’s the limit.
 
 ---
 
-I built FastBar for my own daily use, but if it helps you too, that makes me genuinely happy ✨
+FastBar started as a little tool I built for myself. If it saves you a few clicks too, that’s already a win. 🚀
