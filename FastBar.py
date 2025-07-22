@@ -12,24 +12,23 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject
 
-# Register global hotkey (Alt + Space)
+# Set up Alt+Space as a global hotkey
 MOD_ALT = 0x0001
 VK_SPACE = 0x20
 HOTKEY_ID = 1
 user32 = ctypes.windll.user32
 
-# Create a QObject to emit signal on hotkey press
+# Simple class to listen for hotkey presses
 class HotkeyListener(QObject):
     hotkeyPressed = pyqtSignal()
 
     def start(self):
-        # Start the hotkey listener thread
+        # Run the listener in a background thread
         Thread(target=self._listen, daemon=True).start()
 
     def _listen(self):
-        # Register Alt+Space as the system-wide hotkey
         if not user32.RegisterHotKey(None, HOTKEY_ID, MOD_ALT, VK_SPACE):
-            print("Hotkey registration failed")
+            print("Failed to register hotkey")
             return
         msg = wintypes.MSG()
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
@@ -38,39 +37,47 @@ class HotkeyListener(QObject):
             user32.TranslateMessage(ctypes.byref(msg))
             user32.DispatchMessageW(ctypes.byref(msg))
 
-# Main widget class
 class FastBar(QWidget):
     def __init__(self):
         super().__init__()
+
+        # Basic window setup
         self.setWindowTitle("Fastbar")
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
+
+        # Where we keep shortcut name → path mappings
         self.shortcuts = {}
 
-        # Initialize UI and shortcut indexing
+        # Build UI and index app shortcuts
         self.initUI()
         QTimer.singleShot(0, self.build_index)
 
-        # Start global hotkey handler
+        # Listen for Alt+Space and toggle visibility
         self.hotkey = HotkeyListener()
         self.hotkey.hotkeyPressed.connect(self.toggle_visibility)
         self.hotkey.start()
 
     def initUI(self):
-        # Layout and visual styling
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(5)
 
-        # Search input setup
+        # Text input bar where you type your query
         self.input = QLineEdit(self)
         self.input.setPlaceholderText('Fastbar Search')
         self.input.setFixedHeight(60)
+
+        # Add a close button inside the input field
         close_icon = self.style().standardIcon(QStyle.SP_TitleBarCloseButton)
         close_action = self.input.addAction(close_icon, QLineEdit.TrailingPosition)
         close_action.triggered.connect(self.hide)
+
+        # Connect input events
         self.input.textChanged.connect(self.on_text_changed)
         self.input.returnPressed.connect(self.on_return)
+
+        # Styling the input
         self.input.setStyleSheet('''
             QLineEdit {
                 background: rgba(255, 255, 255, 200);
@@ -80,13 +87,15 @@ class FastBar(QWidget):
                 font-size: 18px;
             }
         ''')
+
+        # Add a shadow to the input field
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(15)
         shadow.setOffset(0)
         shadow.setColor(QColor(0, 0, 0, 100))
         self.input.setGraphicsEffect(shadow)
 
-        # Search result list
+        # Result list for matching shortcuts or search
         self.list_widget = QListWidget(self)
         self.list_widget.setStyleSheet('''
             QListWidget {
@@ -99,6 +108,8 @@ class FastBar(QWidget):
                 background: rgba(100, 100, 255, 150);
             }
         ''')
+
+        # Shadow for the list too
         list_shadow = QGraphicsDropShadowEffect(self)
         list_shadow.setBlurRadius(15)
         list_shadow.setOffset(0)
@@ -108,12 +119,12 @@ class FastBar(QWidget):
         self.list_widget.hide()
         self.list_widget.itemActivated.connect(self.on_return)
 
-        # Add widgets to layout
+        # Put everything together
         layout.addWidget(self.input)
         layout.addWidget(self.list_widget)
         self.setLayout(layout)
 
-        # Size and position
+        # Set window size
         self.setFixedWidth(1000)
         self._min_height = (
             self.input.height() +
@@ -122,15 +133,15 @@ class FastBar(QWidget):
         self.setFixedHeight(self._min_height)
         self.center()
 
+    # Put the window in the center of the screen
     def center(self):
-        # Center the window on screen
         screen = QApplication.primaryScreen().availableGeometry()
         x = (screen.width() - self.width()) // 2
         y = screen.height() // 4
         self.move(x, y)
 
+    # Scan the Start Menu folders for app shortcuts (.lnk)
     def build_index(self):
-        # Build dictionary of Start Menu shortcuts (.lnk files)
         bases = filter(None, (os.getenv('APPDATA'), os.getenv('PROGRAMDATA')))
         for base in bases:
             sm = os.path.join(base, 'Microsoft', 'Windows', 'Start Menu', 'Programs')
@@ -140,8 +151,8 @@ class FastBar(QWidget):
                         name = f[:-4]
                         self.shortcuts[name] = os.path.join(root, f)
 
+    # Show or hide the FastBar on hotkey press
     def toggle_visibility(self):
-        # Show or hide the window on hotkey press
         if self.isVisible():
             self.hide()
         else:
@@ -151,18 +162,21 @@ class FastBar(QWidget):
             self.activateWindow()
             self.input.setFocus()
 
+    # Update result list as user types
     def on_text_changed(self, text):
-        # Update search results as user types
         self.list_widget.clear()
+
         if not text or not self.shortcuts:
             self.list_widget.hide()
             self.setFixedHeight(self._min_height)
             return
+
         matches = [name for name in self.shortcuts if text.lower() in name.lower()]
         items = sorted(matches)[:7] if matches else [f"Search web for '{text}'"]
         self.list_widget.addItems(items)
         self.list_widget.setCurrentRow(0)
         self.list_widget.show()
+
         item_h = self.list_widget.sizeHintForRow(0)
         total_h = (
             self._min_height +
@@ -171,12 +185,11 @@ class FastBar(QWidget):
         )
         self.setFixedHeight(total_h)
 
+    # Handle what happens when you press Enter
     def on_return(self):
-        # Handle launching apps or web searches
         current = self.list_widget.currentItem()
         query = self.input.text().strip()
 
-        # Direct match
         if query in self.shortcuts:
             os.startfile(self.shortcuts[query])
         elif current:
@@ -189,13 +202,11 @@ class FastBar(QWidget):
                 if path:
                     os.startfile(path)
         else:
-            # Fallback: try running input as path or command
             try:
                 os.startfile(query)
             except Exception:
                 pass
 
-        # Reset UI state
         self.input.clear()
         self.list_widget.hide()
         self.setFixedHeight(self._min_height)
