@@ -1,12 +1,11 @@
 # FastBar: A Spotlight Alternative for Windows
 <img width="1172" height="518" alt="Screenshot 2025-07-22 054942" src="https://github.com/user-attachments/assets/787cc194-3fe2-4a65-8ee9-859b1ff269f6" />
 
-
-[⬇️ Download FastBar.exe](https://github.com/shenfurkan/FastBar/releases/download/1.0/FastBar.exe)
-
 FastBar is a simple app launcher for Windows — kind of like a minimalist Spotlight alternative. Just press `Alt + Space`, type a few letters, and launch anything instantly.
 
 If it’s in your Start Menu, FastBar will find it. If not, it sends your search to the web. That’s it. No bloat, no distractions.
+
+[⬇️ Download FastBar.exe](https://github.com/shenfurkan/FastBar/releases/download/1.0/FastBar.exe)
 
 ## ✨ What It Does
 
