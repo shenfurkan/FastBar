@@ -1,5 +1,7 @@
 # FastBar: A Spotlight Alternative for Windows
-<img width="1172" height="518" alt="Screenshot 2025-07-22 054942" src="https://github.com/user-attachments/assets/787cc194-3fe2-4a65-8ee9-859b1ff269f6" />
+<img width="1178" height="357" alt="Screenshot 2025-07-22 054914" src="https://github.com/user-attachments/assets/2f98cd1e-14d4-4472-aee3-e6a057c0465c" />
+
+
 
 FastBar is a simple app launcher for Windows — kind of like a minimalist Spotlight alternative. Just press `Alt + Space`, type a few letters, and launch anything instantly.
 
