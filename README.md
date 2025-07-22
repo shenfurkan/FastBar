@@ -2,7 +2,7 @@
 
 [⬇️ Download FastBar.exe](https://github.com/shenfurkan/FastBar/releases/download/1.0/FastBar.exe)
 
-FastBar is a super simple, super fast app launcher for Windows — kind of like a minimalist Spotlight alternative. Just press `Alt + Space`, type a few letters, and launch anything instantly.
+FastBar is a simple app launcher for Windows — kind of like a minimalist Spotlight alternative. Just press `Alt + Space`, type a few letters, and launch anything instantly.
 
 If it’s in your Start Menu, FastBar will find it. If not, it sends your search to the web. That’s it. No bloat, no distractions.
 
