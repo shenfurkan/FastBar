@@ -1,5 +1,6 @@
-<img width="1172" height="518" alt="Screenshot 2025-07-22 054942" src="https://github.com/user-attachments/assets/787cc194-3fe2-4a65-8ee9-859b1ff269f6" />
 # FastBar: A Spotlight Alternative for Windows
+<img width="1172" height="518" alt="Screenshot 2025-07-22 054942" src="https://github.com/user-attachments/assets/787cc194-3fe2-4a65-8ee9-859b1ff269f6" />
+
 
 [⬇️ Download FastBar.exe](https://github.com/shenfurkan/FastBar/releases/download/1.0/FastBar.exe)
 
