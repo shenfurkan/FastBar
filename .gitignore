@@ -1,0 +1,34 @@
+# Build output
+bin/
+obj/
+
+# Publish output
+publish/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docview
+
+# Rider / JetBrains
+.idea/
+
+# Debug / build logs (these are in the project root)
+*.log
+*.binlog
+build.txt
+build_*.txt
+build_*.log
+err.txt
+err_detail.log
+run*.log
+run*.txt
+
+# FastBar version notes (not source)
+FastBar Version/
+
+# Runtime files
+fastbar_debug.log
+fastbar_prefixes.txt
