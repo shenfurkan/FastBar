@@ -23,8 +23,20 @@ namespace FastBar
             catch { }
         }
 
+        private static System.Threading.Mutex? _mutex;
+        private const string MutexName = "Global\\FastBar_SingleInstanceMutex";
+
         protected override void OnStartup(StartupEventArgs e)
         {
+            // Only allow 1 instance
+            _mutex = new System.Threading.Mutex(true, MutexName, out bool createdNew);
+            if (!createdNew)
+            {
+                // App is already running in background. Exit gracefully.
+                Environment.Exit(0);
+                return;
+            }
+
             Log("========================================");
             Log($"FastBar starting  |  .NET {Environment.Version}  |  OS {Environment.OSVersion}");
             Log($"BaseDirectory: {AppContext.BaseDirectory}");

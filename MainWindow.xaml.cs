@@ -249,6 +249,7 @@ namespace FastBar
 
             LoadThemePreference();
             LoadSearchPrefixes();
+            EnsureAutoStart(); // Added automatic start on login
 
             SearchBox.Focus();
             Task.Run(BuildShortcutIndex);
@@ -507,6 +508,20 @@ namespace FastBar
             SearchBox.Clear();
             ResultList.ItemsSource = null;
             ResultList.Visibility  = Visibility.Collapsed;
+
+            // Aggressive garbage collection to free up memory when hidden in the background
+            Task.Delay(500).ContinueWith(_ =>
+            {
+                bool isVisible = false;
+                Dispatcher.Invoke(() => { isVisible = (Visibility == Visibility.Visible); });
+                
+                if (!isVisible)
+                {
+                    App.Log("Aggressive GC (background optimization)");
+                    GC.Collect(2, GCCollectionMode.Aggressive, true, true);
+                    GC.WaitForPendingFinalizers();
+                }
+            });
         }
 
         // ────────────────────────────────────────────────────────────────────────
@@ -653,8 +668,48 @@ namespace FastBar
             if (TryEvaluateUnitConversion(query, out string conversionResult))
                 items.Add($"🔄 {conversionResult}");
 
-            // ── 2. App shortcuts ─────────────────────────────────────────────────
-            string shortcutQuery = StripSearchPrefix(query, out _);
+            // ── 2. Check for Search Engine Prefix ────────────────────────────────
+            string shortcutQuery = StripSearchPrefix(query, out string? engine);
+
+            if (engine != null)
+            {
+                items.Add(BuildWebFallbackLabel(query));
+                
+                ResultList.ItemsSource = items;
+                ResultList.Visibility  = Visibility.Visible;
+                if (ResultList.Items.Count > 0)
+                    ResultList.SelectedIndex = 0;
+
+                CancelFileSearch();
+                _fileCts = new System.Threading.CancellationTokenSource();
+                var cts = _fileCts;
+
+                try
+                {
+                    // Small debounce
+                    await Task.Delay(250, cts.Token);
+                    
+                    var suggestions = await FetchSearchSuggestionsAsync(shortcutQuery, cts.Token);
+                    if (!cts.IsCancellationRequested && suggestions.Count > 0)
+                    {
+                        var current = (ResultList.ItemsSource as IEnumerable<string>)?.ToList() ?? new List<string>();
+                        int fallbackIndex = current.FindIndex(x => x.StartsWith("Search ") && x.Contains(" for '"));
+                        if (fallbackIndex >= 0)
+                            current.InsertRange(fallbackIndex, suggestions);
+                        else
+                            current.AddRange(suggestions);
+
+                        ResultList.ItemsSource = current.Distinct().ToList();
+                        ResultList.Visibility  = Visibility.Visible;
+                    }
+                }
+                catch (TaskCanceledException) { }
+                catch (Exception ex) { App.Log($"[WARN] web-suggestions: {ex.Message}"); }
+                
+                return;
+            }
+
+            // ── 3. App shortcuts ─────────────────────────────────────────────────
             var matches = _shortcuts.Keys
                 .Where(k  => k.Contains(shortcutQuery, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(k => k.StartsWith(shortcutQuery, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
@@ -664,7 +719,7 @@ namespace FastBar
 
             items.AddRange(matches);
 
-            // ── 3. Web / prefix fallback ─────────────────────────────────────────
+            // ── 4. Web fallback (if no apps matched) ─────────────────────────────
             if (matches.Count == 0)
                 items.Add(BuildWebFallbackLabel(query));
 
@@ -673,60 +728,58 @@ namespace FastBar
             if (ResultList.Items.Count > 0)
                 ResultList.SelectedIndex = 0;
 
-            // ── 4. File search (async, updates list when done) ───────────────────
+            // ── 5. File search & suggestions (async, updates list when done) 
             CancelFileSearch();
             _fileCts = new System.Threading.CancellationTokenSource();
-            var cts = _fileCts;
+            var ctsMain = _fileCts;
 
             try
             {
-                // Small debounce so we don't fire on every keystroke mid-word
-                await Task.Delay(200, cts.Token);
-                var fileResults = await SearchFilesAsync(query, cts.Token);
+                // Debounce to reduce disk I/O and network requests while typing
+                await Task.Delay(350, ctsMain.Token);
+                var fileResults = await SearchFilesAsync(query, ctsMain.Token);
 
-                if (cts.IsCancellationRequested) return;
-                if (fileResults.Count == 0) return;
+                if (ctsMain.IsCancellationRequested) return;
 
-                // Merge into the existing list (avoid duplicates)
-                var current = (ResultList.ItemsSource as IEnumerable<string>)?.ToList()
-                              ?? new List<string>();
-                foreach (var fr in fileResults)
-                    if (!current.Contains(fr))
-                        current.Add(fr);
-
-                ResultList.ItemsSource = current;
-                ResultList.Visibility  = Visibility.Visible;
-
-                // ── 4.5 Web Search Suggestions ───────────────────────────────────────
-                var suggestions = await FetchSearchSuggestionsAsync(query, cts.Token);
-                if (!cts.IsCancellationRequested && suggestions.Count > 0)
+                var current = (ResultList.ItemsSource as IEnumerable<string>)?.ToList() ?? new List<string>();
+                
+                if (fileResults.Count > 0)
                 {
-                    current = (ResultList.ItemsSource as IEnumerable<string>)?.ToList() ?? new List<string>();
+                    foreach (var fr in fileResults)
+                        if (!current.Contains(fr))
+                            current.Add(fr);
+                }
+
+                // ── Web Search Suggestions ───────────────────────────────────────
+                var suggestions = await FetchSearchSuggestionsAsync(shortcutQuery, ctsMain.Token);
+                if (!ctsMain.IsCancellationRequested && suggestions.Count > 0)
+                {
                     // Insert before the generic fallback
-                    int fallbackIndex = current.FindIndex(x => x.StartsWith("Search web for '") || x.StartsWith("Search Yandex") || x.StartsWith("Search TPB") || x.StartsWith("Search Google"));
+                    int fallbackIndex = current.FindIndex(x => x.StartsWith("Search ") && x.Contains(" for '"));
                     if (fallbackIndex >= 0)
                         current.InsertRange(fallbackIndex, suggestions);
                     else
                         current.AddRange(suggestions);
-
-                    ResultList.ItemsSource = current.Distinct().ToList();
-                    ResultList.Visibility  = Visibility.Visible;
                 }
 
-                // ── 3.6 Weather Info ───────────────────────────────────────
+                // ── Weather Info ─────────────────────────────────────────────────
                 if (lowerQuery.StartsWith("weather ") || lowerQuery.StartsWith("wx "))
                 {
                     string loc = lowerQuery.Substring(lowerQuery.IndexOf(' ') + 1).Trim();
                     if (!string.IsNullOrEmpty(loc))
                     {
-                        string wx = await FetchWeatherAsync(loc, cts.Token);
-                        if (!string.IsNullOrEmpty(wx) && !cts.IsCancellationRequested)
+                        string wx = await FetchWeatherAsync(loc, ctsMain.Token);
+                        if (!string.IsNullOrEmpty(wx) && !ctsMain.IsCancellationRequested)
                         {
-                            current = (ResultList.ItemsSource as IEnumerable<string>)?.ToList() ?? new List<string>();
                             current.Insert(0, $"☁ {wx}");
-                            ResultList.ItemsSource = current.Distinct().ToList();
                         }
                     }
+                }
+
+                if (!ctsMain.IsCancellationRequested)
+                {
+                    ResultList.ItemsSource = current.Distinct().ToList();
+                    ResultList.Visibility  = Visibility.Visible;
                 }
             }
             catch (TaskCanceledException) { /* query changed – silent */ }
@@ -957,6 +1010,8 @@ namespace FastBar
         // ────────────────────────────────────────────────────────────────────────
         // Search prefix helpers
         // ────────────────────────────────────────────────────────────────────────
+        private static readonly System.Net.Http.HttpClient _httpClient = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+
         private void CancelFileSearch()
         {
             _fileCts?.Cancel();
@@ -969,10 +1024,9 @@ namespace FastBar
             var suggestions = new List<string>();
             try
             {
-                using var client = new System.Net.Http.HttpClient();
                 // DuckDuckGo autocomplete API
                 string url = $"https://duckduckgo.com/ac/?q={Uri.EscapeDataString(query)}";
-                using var response = await client.GetAsync(url, ct);
+                using var response = await _httpClient.GetAsync(url, ct);
                 if (!response.IsSuccessStatusCode) return suggestions;
                 
                 string json = await response.Content.ReadAsStringAsync(ct);
@@ -995,11 +1049,9 @@ namespace FastBar
         {
             try
             {
-                using var client = new System.Net.Http.HttpClient();
-                client.Timeout = TimeSpan.FromSeconds(3);
                 // format=3 gives a nice short "Location: Condition +Temp"
                 string url = $"https://wttr.in/{Uri.EscapeDataString(loc)}?format=3";
-                using var response = await client.GetAsync(url, ct);
+                using var response = await _httpClient.GetAsync(url, ct);
                 if (response.IsSuccessStatusCode)
                 {
                     string text = await response.Content.ReadAsStringAsync(ct);
@@ -1198,11 +1250,45 @@ namespace FastBar
             int start = _pos;
             while (_pos < _input.Length &&
                    (char.IsDigit(_input[_pos]) || _input[_pos] == '.'))
+            {
                 _pos++;
+            }
             if (_pos == start)
                 throw new FormatException($"Expected number at position {_pos}");
             return double.Parse(_input[start.._pos],
                 System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // Startup Registry Configuration
+    // ────────────────────────────────────────────────────────────────────────
+    public partial class MainWindow
+    {
+        private static void EnsureAutoStart()
+        {
+            try
+            {
+                string exePath = Environment.ProcessPath ?? "";
+                if (string.IsNullOrEmpty(exePath)) return;
+
+                using Microsoft.Win32.RegistryKey? key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
+
+                if (key != null)
+                {
+                    string currentVal = key.GetValue("FastBar") as string ?? "";
+                    if (!string.Equals(currentVal, exePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        key.SetValue("FastBar", exePath);
+                        App.Log("Added FastBar to Registry AutoStart");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[WARN] EnsureAutoStart: {ex.Message}");
+            }
         }
     }
 }
