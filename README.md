@@ -1,6 +1,6 @@
 # FastBar
 
-A fast, Spotlight-style launcher for Windows.
+A fast, Spotlight style bar for Windows.
 
 ![FastBar](Images/main.jpg)
 
@@ -8,7 +8,7 @@ A fast, Spotlight-style launcher for Windows.
 
 ## What it does
 
-Press **Alt + Space** anywhere to open FastBar. Start typing — it finds apps, files, and does calculations instantly.
+Press **Alt + Space** anywhere to open FastBar. Start typing it finds apps, files, and does calculations instantly.
 
 ![Screenshot](Images/screenshot.jpg)
 
@@ -26,6 +26,7 @@ Press **Alt + Space** anywhere to open FastBar. Start typing — it finds apps, 
 | `g. cats` | Searches **Google** for "cats" |
 | `y. cats` | Searches **Yandex** for "cats" |
 | `tb. ubuntu` | Searches **The Pirate Bay** |
+| `w. github` | Searches **winget ragerworks ** |
 | `anything else` | Falls back to **DuckDuckGo** search |
 | `shutdown` / `restart` / `sleep` / `lock` | System commands |
 
