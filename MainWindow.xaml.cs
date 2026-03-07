@@ -249,7 +249,6 @@ namespace FastBar
 
             LoadThemePreference();
             LoadSearchPrefixes();
-            EnsureAutoStart(); // Added automatic start on login
 
             SearchBox.Focus();
             Task.Run(BuildShortcutIndex);
@@ -424,6 +423,18 @@ namespace FastBar
                 strip.Items.Add(themeItem);
                 strip.Items.Add(new System.Windows.Forms.ToolStripSeparator());
 
+                // Auto-Start toggle
+                var autoStartItem = new System.Windows.Forms.ToolStripMenuItem("Start with Windows");
+                autoStartItem.Checked = IsAutoStartEnabled();
+                autoStartItem.Click += (_, __) =>
+                {
+                    bool enable = !IsAutoStartEnabled();
+                    SetAutoStart(enable);
+                    autoStartItem.Checked = enable;
+                };
+                strip.Items.Add(autoStartItem);
+                strip.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+
                 strip.Items.Add("Exit", null, (_, __) =>
                 {
                     App.Log("Tray: exit");
@@ -559,82 +570,50 @@ namespace FastBar
         // ────────────────────────────────────────────────────────────────────────
         // File-content search
         // ────────────────────────────────────────────────────────────────────────
-        private static readonly string[] _fileSearchRoots = new[]
-        {
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
-            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
-            Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
-            Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
-        };
-
-        // Text-readable extensions we will grep inside
-        private static readonly HashSet<string> _textExtensions = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ".txt", ".md", ".csv", ".json", ".xml", ".html", ".htm",
-            ".log", ".bat", ".ps1", ".ini", ".yaml", ".yml", ".cs",
-            ".py", ".js", ".ts", ".css", ".config", ".toml",
-        };
 
         private static readonly int _fileResultCap = 5;
 
         /// <summary>
-        /// Searches file names and (for text files) contents inside user folders.
+        /// Searches file names and text contents using Windows Search Index (OleDb).
         /// Returns at most <see cref="_fileResultCap"/> items prefixed with "📄 ".
         /// </summary>
         private static async Task<List<string>> SearchFilesAsync(string query,
             System.Threading.CancellationToken ct)
         {
-            var found = new System.Collections.Concurrent.ConcurrentBag<(int rank, string label)>();
+            var results = new List<string>();
 
             await Task.Run(() =>
             {
-                foreach (var root in _fileSearchRoots)
+                try
                 {
-                    if (!Directory.Exists(root)) continue;
-                    try
+                    using var connection = new System.Data.OleDb.OleDbConnection("Provider=Search.CollatorDSO;Extended Properties='Application=Windows';");
+                    connection.Open();
+
+                    string safeQuery = query.Replace("'", "''");
+
+                    string sql = $"SELECT TOP {_fileResultCap} System.ItemPathDisplay FROM SystemIndex " +
+                                 $"WHERE System.FileName LIKE '%{safeQuery}%' OR FREETEXT('{safeQuery}') " +
+                                 $"ORDER BY System.Search.Rank DESC";
+
+                    using var command = new System.Data.OleDb.OleDbCommand(sql, connection);
+                    using var reader = command.ExecuteReader();
+
+                    while (reader.Read() && !ct.IsCancellationRequested)
                     {
-                        foreach (var file in Directory.EnumerateFiles(root, "*",
-                                     SearchOption.AllDirectories))
+                        var path = reader.GetString(0);
+                        if (!string.IsNullOrEmpty(path))
                         {
-                            if (ct.IsCancellationRequested) return;
-                            if (found.Count >= _fileResultCap * 3) break; // rough early-out
-
-                            string name = Path.GetFileName(file);
-                            bool nameMatch = name.Contains(query,
-                                StringComparison.OrdinalIgnoreCase);
-
-                            if (nameMatch)
-                            {
-                                found.Add((0, $"📄 {file}"));
-                                continue;
-                            }
-
-                            // Grep inside text files
-                            string ext = Path.GetExtension(file);
-                            if (!_textExtensions.Contains(ext)) continue;
-                            try
-                            {
-                                var fi = new FileInfo(file);
-                                if (fi.Length > 2 * 1024 * 1024) continue; // skip >2 MB
-
-                                string contents = File.ReadAllText(file);
-                                if (contents.Contains(query, StringComparison.OrdinalIgnoreCase))
-                                    found.Add((1, $"📄 {file}"));
-                            }
-                            catch { /* ignore locked / unreadable files */ }
+                            results.Add($"📄 {path}");
                         }
                     }
-                    catch (Exception ex) { App.Log($"[WARN] file-search '{root}': {ex.Message}"); }
+                }
+                catch (Exception ex)
+                {
+                    App.Log($"[WARN] OleDb Windows Search failed: {ex.Message}");
                 }
             }, ct);
 
-            return found
-                .OrderBy(x => x.rank).ThenBy(x => x.label)
-                .Take(_fileResultCap)
-                .Select(x => x.label)
-                .ToList();
+            return results;
         }
 
         // ────────────────────────────────────────────────────────────────────────
@@ -798,6 +777,7 @@ namespace FastBar
                 "y"  => $"Search Yandex for '{stripped}'",
                 "tb" => $"Search TPB for '{stripped}'",
                 "g"  => $"Search Google for '{stripped}'",
+                "w"  => $"Search Winget for '{stripped}'",
                 _    => $"Search web for '{query}'",
             };
         }
@@ -917,6 +897,11 @@ namespace FastBar
                 {
                     Launch($"https://www.google.com/search?q={Uri.EscapeDataString(strippedQuery)}");
                 }
+                // ── Search prefix: w  → Winget ────────────────────────────────
+                else if (engine == "w" && strippedQuery.Length > 0)
+                {
+                    Launch($"https://winget.ragerworks.com/search/all/{Uri.EscapeDataString(strippedQuery)}/?limit=50");
+                }
                 // ── Web Search Suggestion ─────────────────────────────────────────
                 if (selected.StartsWith("🔍 "))
                 {
@@ -941,6 +926,7 @@ namespace FastBar
                     if (name == "Yandex") Launch($"https://yandex.com/search/?text={Uri.EscapeDataString(q)}");
                     else if (name == "TPB") Launch($"https://tpb.party/search/{Uri.EscapeDataString(q)}/1/99/0");
                     else if (name == "Google") Launch($"https://www.google.com/search?q={Uri.EscapeDataString(q)}");
+                    else if (name == "Winget") Launch($"https://winget.ragerworks.com/search/all/{Uri.EscapeDataString(q)}/?limit=50");
                     else if (name == "web") Launch($"https://duckduckgo.com/?q={Uri.EscapeDataString(q)}");
                     else
                     {
@@ -1133,6 +1119,8 @@ namespace FastBar
             { engine = "tb"; return query[3..].Trim(); }
             if (query.StartsWith("g ", StringComparison.OrdinalIgnoreCase) || query.StartsWith("g.", StringComparison.OrdinalIgnoreCase))
             { engine = "g";  return query[2..].Trim(); }
+            if (query.StartsWith("w ", StringComparison.OrdinalIgnoreCase) || query.StartsWith("w.", StringComparison.OrdinalIgnoreCase))
+            { engine = "w";  return query[2..].Trim(); }
             
             engine = null;
             return query;
@@ -1265,7 +1253,18 @@ namespace FastBar
     // ────────────────────────────────────────────────────────────────────────
     public partial class MainWindow
     {
-        private static void EnsureAutoStart()
+        private static bool IsAutoStartEnabled()
+        {
+            try
+            {
+                using Microsoft.Win32.RegistryKey? key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", false);
+                return key?.GetValue("FastBar") != null;
+            }
+            catch { return false; }
+        }
+
+        private static void SetAutoStart(bool enable)
         {
             try
             {
@@ -1277,17 +1276,21 @@ namespace FastBar
 
                 if (key != null)
                 {
-                    string currentVal = key.GetValue("FastBar") as string ?? "";
-                    if (!string.Equals(currentVal, exePath, StringComparison.OrdinalIgnoreCase))
+                    if (enable)
                     {
                         key.SetValue("FastBar", exePath);
-                        App.Log("Added FastBar to Registry AutoStart");
+                        App.Log("Enabled Registry AutoStart");
+                    }
+                    else
+                    {
+                        key.DeleteValue("FastBar", false);
+                        App.Log("Disabled Registry AutoStart");
                     }
                 }
             }
             catch (Exception ex)
             {
-                App.Log($"[WARN] EnsureAutoStart: {ex.Message}");
+                App.Log($"[WARN] SetAutoStart: {ex.Message}");
             }
         }
     }

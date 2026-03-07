@@ -53,7 +53,8 @@ namespace FastBar
         private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
             Log($"[FATAL/UI] {e.Exception}");
-            e.Handled = true; // keep the app alive so the log gets flushed
+            System.Windows.MessageBox.Show($"A fatal UI error occurred:\n\n{e.Exception.Message}\n\nThe application will now close.", "FastBar Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            Environment.Exit(1);
         }
 
         private void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
