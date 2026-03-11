@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -778,6 +778,9 @@ namespace FastBar
                 "tb" => $"Search TPB for '{stripped}'",
                 "g"  => $"Search Google for '{stripped}'",
                 "w"  => $"Search Winget for '{stripped}'",
+                "sp" => $"Search Startpage for '{stripped}'",
+                "b"  => $"Search Bing for '{stripped}'",
+                "bs" => $"Search Brave Search for '{stripped}'",
                 _    => $"Search web for '{query}'",
             };
         }
@@ -877,8 +880,34 @@ namespace FastBar
 
                 string strippedQuery = StripSearchPrefix(query, out string? engine);
 
+                // ── Web Search Suggestion (priority: suggestion text beats original query) ──
+                if (selected.StartsWith("🔍 "))
+                {
+                    string q = selected[3..];
+                    // Respect the active engine prefix; fall back to DuckDuckGo if none
+                    if (engine != null && _customEngines.TryGetValue(engine, out var customSug))
+                        Launch(customSug.urlTemplate.Replace("{query}", Uri.EscapeDataString(q)));
+                    else if (engine == "y")
+                        Launch($"https://yandex.com/search/?text={Uri.EscapeDataString(q)}");
+                    else if (engine == "tb")
+                        Launch($"https://tpb.party/search/{Uri.EscapeDataString(q)}/1/99/0");
+                    else if (engine == "g")
+                        Launch($"https://www.google.com/search?q={Uri.EscapeDataString(q)}");
+                    else if (engine == "w")
+                        Launch($"https://winget.ragerworks.com/search/all/{Uri.EscapeDataString(q)}/?limit=50");
+                    else if (engine == "sp")
+                        Launch($"https://www.startpage.com/search?q={Uri.EscapeDataString(q)}");
+                    else if (engine == "b")
+                        Launch($"https://www.bing.com/search?q={Uri.EscapeDataString(q)}");
+                    else if (engine == "bs")
+                        Launch($"https://search.brave.com/search?q={Uri.EscapeDataString(q)}");
+                    else
+                        Launch($"https://duckduckgo.com/?q={Uri.EscapeDataString(q)}");
+                    HideWindow();
+                    return;
+                }
                 // ── Search Custom Engine ──────────────────────────────────────
-                if (engine != null && _customEngines.TryGetValue(engine, out var custom) && strippedQuery.Length > 0)
+                else if (engine != null && _customEngines.TryGetValue(engine, out var custom) && strippedQuery.Length > 0)
                 {
                     Launch(custom.urlTemplate.Replace("{query}", Uri.EscapeDataString(strippedQuery)));
                 }
@@ -902,13 +931,20 @@ namespace FastBar
                 {
                     Launch($"https://winget.ragerworks.com/search/all/{Uri.EscapeDataString(strippedQuery)}/?limit=50");
                 }
-                // ── Web Search Suggestion ─────────────────────────────────────────
-                if (selected.StartsWith("🔍 "))
+                // ── Search prefix: sp → Startpage ─────────────────────────────
+                else if (engine == "sp" && strippedQuery.Length > 0)
                 {
-                    string q = selected[3..];
-                    Launch($"https://duckduckgo.com/?q={Uri.EscapeDataString(q)}");
-                    HideWindow();
-                    return;
+                    Launch($"https://www.startpage.com/search?q={Uri.EscapeDataString(strippedQuery)}");
+                }
+                // ── Search prefix: b  → Bing ───────────────────────────────────
+                else if (engine == "b" && strippedQuery.Length > 0)
+                {
+                    Launch($"https://www.bing.com/search?q={Uri.EscapeDataString(strippedQuery)}");
+                }
+                // ── Search prefix: bs → Brave Search ──────────────────────────
+                else if (engine == "bs" && strippedQuery.Length > 0)
+                {
+                    Launch($"https://search.brave.com/search?q={Uri.EscapeDataString(strippedQuery)}");
                 }
 
                 // ── Exact shortcut match on what the user typed ───────────────
@@ -927,6 +963,9 @@ namespace FastBar
                     else if (name == "TPB") Launch($"https://tpb.party/search/{Uri.EscapeDataString(q)}/1/99/0");
                     else if (name == "Google") Launch($"https://www.google.com/search?q={Uri.EscapeDataString(q)}");
                     else if (name == "Winget") Launch($"https://winget.ragerworks.com/search/all/{Uri.EscapeDataString(q)}/?limit=50");
+                    else if (name == "Startpage") Launch($"https://www.startpage.com/search?q={Uri.EscapeDataString(q)}");
+                    else if (name == "Bing") Launch($"https://www.bing.com/search?q={Uri.EscapeDataString(q)}");
+                    else if (name == "Brave Search") Launch($"https://search.brave.com/search?q={Uri.EscapeDataString(q)}");
                     else if (name == "web") Launch($"https://duckduckgo.com/?q={Uri.EscapeDataString(q)}");
                     else
                     {
@@ -1121,7 +1160,13 @@ namespace FastBar
             { engine = "g";  return query[2..].Trim(); }
             if (query.StartsWith("w ", StringComparison.OrdinalIgnoreCase) || query.StartsWith("w.", StringComparison.OrdinalIgnoreCase))
             { engine = "w";  return query[2..].Trim(); }
-            
+            if (query.StartsWith("bs ", StringComparison.OrdinalIgnoreCase) || query.StartsWith("bs.", StringComparison.OrdinalIgnoreCase))
+            { engine = "bs"; return query[3..].Trim(); }
+            if (query.StartsWith("sp ", StringComparison.OrdinalIgnoreCase) || query.StartsWith("sp.", StringComparison.OrdinalIgnoreCase))
+            { engine = "sp"; return query[3..].Trim(); }
+            if (query.StartsWith("b ", StringComparison.OrdinalIgnoreCase) || query.StartsWith("b.", StringComparison.OrdinalIgnoreCase))
+            { engine = "b";  return query[2..].Trim(); }
+
             engine = null;
             return query;
         }
