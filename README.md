@@ -25,6 +25,10 @@ Press **Alt + Space** anywhere to open FastBar. Start typing it finds apps, file
 | `weather Istanbul` | Shows current weather |
 | `g. cats` | Searches **Google** for "cats" |
 | `y. cats` | Searches **Yandex** for "cats" |
+| `p. cats` | Searches **Pinterest** for "pins" |
+| `sp. cats` | Searches **Startpage** for "cats" |
+| `b. cats` | Searches **Bing** for "cats" |
+| `bs. cats` | Searches **Brave Search** for "cats" |
 | `tb. ubuntu` | Searches **The Pirate Bay** |
 | `w. github` | Searches **winget ragerworks ** |
 | `anything else` | Falls back to **DuckDuckGo** search |
@@ -57,4 +61,4 @@ Right-click the tray icon to switch between **Dark** and **Light** themes.
 ## Requirements
 
 - Windows 10 or later
-- .NET 8
+- .NET 9 or later

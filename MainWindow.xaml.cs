@@ -163,7 +163,7 @@ namespace FastBar
                 int vk = Marshal.ReadInt32(lParam);
                 if (vk == VK_SPACE && (GetAsyncKeyState(0x12) & 0x8000) != 0)
                 {
-                    App.Log("Alt+Space → ToggleVisibility");
+                    Task.Run(() => App.Log("Alt+Space → ToggleVisibility"));
                     Dispatcher.InvokeAsync(ToggleVisibility);
                     return (IntPtr)1;
                 }
@@ -296,7 +296,9 @@ namespace FastBar
             try
             {
                 Directory.CreateDirectory(_settingsDir);
-                File.WriteAllText(_themeFile, _isDarkTheme ? "dark" : "light");
+                string tempFile = _themeFile + ".tmp";
+                File.WriteAllText(tempFile, _isDarkTheme ? "dark" : "light");
+                File.Move(tempFile, _themeFile, true);
             }
             catch (Exception ex) { App.Log($"[WARN] SaveThemePreference: {ex.Message}"); }
         }
@@ -596,6 +598,7 @@ namespace FastBar
                                  $"ORDER BY System.Search.Rank DESC";
 
                     using var command = new System.Data.OleDb.OleDbCommand(sql, connection);
+                    using var ctRegistration = ct.Register(() => { try { command.Cancel(); } catch {} });
                     using var reader = command.ExecuteReader();
 
                     while (reader.Read() && !ct.IsCancellationRequested)
@@ -781,6 +784,7 @@ namespace FastBar
                 "sp" => $"Search Startpage for '{stripped}'",
                 "b"  => $"Search Bing for '{stripped}'",
                 "bs" => $"Search Brave Search for '{stripped}'",
+                "p"  => $"Search Pinterest for '{stripped}'",
                 _    => $"Search web for '{query}'",
             };
         }
@@ -901,6 +905,8 @@ namespace FastBar
                         Launch($"https://www.bing.com/search?q={Uri.EscapeDataString(q)}");
                     else if (engine == "bs")
                         Launch($"https://search.brave.com/search?q={Uri.EscapeDataString(q)}");
+                    else if (engine == "p")
+                        Launch($"https://www.pinterest.com/search/pins/?q={Uri.EscapeDataString(q)}");
                     else
                         Launch($"https://duckduckgo.com/?q={Uri.EscapeDataString(q)}");
                     HideWindow();
@@ -946,6 +952,11 @@ namespace FastBar
                 {
                     Launch($"https://search.brave.com/search?q={Uri.EscapeDataString(strippedQuery)}");
                 }
+                // ── Search prefix: p  → Pinterest ─────────────────────────────
+                else if (engine == "p" && strippedQuery.Length > 0)
+                {
+                    Launch($"https://www.pinterest.com/search/pins/?q={Uri.EscapeDataString(strippedQuery)}");
+                }
 
                 // ── Exact shortcut match on what the user typed ───────────────
                 else if (_shortcuts.TryGetValue(query, out string? p1))
@@ -966,6 +977,7 @@ namespace FastBar
                     else if (name == "Startpage") Launch($"https://www.startpage.com/search?q={Uri.EscapeDataString(q)}");
                     else if (name == "Bing") Launch($"https://www.bing.com/search?q={Uri.EscapeDataString(q)}");
                     else if (name == "Brave Search") Launch($"https://search.brave.com/search?q={Uri.EscapeDataString(q)}");
+                    else if (name == "Pinterest") Launch($"https://www.pinterest.com/search/pins/?q={Uri.EscapeDataString(q)}");
                     else if (name == "web") Launch($"https://duckduckgo.com/?q={Uri.EscapeDataString(q)}");
                     else
                     {
@@ -1166,6 +1178,8 @@ namespace FastBar
             { engine = "sp"; return query[3..].Trim(); }
             if (query.StartsWith("b ", StringComparison.OrdinalIgnoreCase) || query.StartsWith("b.", StringComparison.OrdinalIgnoreCase))
             { engine = "b";  return query[2..].Trim(); }
+            if (query.StartsWith("p ", StringComparison.OrdinalIgnoreCase) || query.StartsWith("p.", StringComparison.OrdinalIgnoreCase))
+            { engine = "p";  return query[2..].Trim(); }
 
             engine = null;
             return query;
