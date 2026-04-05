@@ -331,7 +331,7 @@ namespace FastBar
 
                 res["ThemeTextForeground"]        = new SolidColorBrush(Colors.White);
                 res["ThemeCaretBrush"]            = new SolidColorBrush(Colors.White);
-                res["ThemePlaceholderForeground"] = new SolidColorBrush(Color.FromRgb(0x60, 0x60, 0x60));
+                res["ThemePlaceholderForeground"] = new SolidColorBrush(Color.FromRgb(0x98, 0x98, 0x98));
                 res["ThemeItemSelectedBackground"]    = new SolidColorBrush(Color.FromArgb(0x1A, 0xFF, 0xFF, 0xFF));
                 res["ThemeItemSelectedForeground"]    = new SolidColorBrush(Colors.White);
                 res["ThemeItemHoverBackground"]       = new SolidColorBrush(Color.FromArgb(0x0A, 0xFF, 0xFF, 0xFF));
@@ -525,15 +525,19 @@ namespace FastBar
             // Aggressive garbage collection to free up memory when hidden in the background
             Task.Delay(500).ContinueWith(_ =>
             {
-                bool isVisible = false;
-                Dispatcher.Invoke(() => { isVisible = (Visibility == Visibility.Visible); });
-                
-                if (!isVisible)
+                try
                 {
-                    App.Log("Aggressive GC (background optimization)");
-                    GC.Collect(2, GCCollectionMode.Aggressive, true, true);
-                    GC.WaitForPendingFinalizers();
+                    bool isVisible = false;
+                    Dispatcher.Invoke(() => { isVisible = (Visibility == Visibility.Visible); });
+
+                    if (!isVisible)
+                    {
+                        App.Log("Aggressive GC (background optimization)");
+                        GC.Collect(2, GCCollectionMode.Aggressive, true, true);
+                        GC.WaitForPendingFinalizers();
+                    }
                 }
+                catch { /* Window may have been closed – ignore */ }
             });
         }
 
@@ -601,7 +605,7 @@ namespace FastBar
                     using var ctRegistration = ct.Register(() => { try { command.Cancel(); } catch {} });
                     using var reader = command.ExecuteReader();
 
-                    while (reader.Read() && !ct.IsCancellationRequested)
+                    while (reader != null && reader.Read() && !ct.IsCancellationRequested)
                     {
                         var path = reader.GetString(0);
                         if (!string.IsNullOrEmpty(path))
@@ -701,9 +705,9 @@ namespace FastBar
 
             items.AddRange(matches);
 
-            // ── 4. Web fallback (if no apps matched) ─────────────────────────────
-            if (matches.Count == 0)
-                items.Add(BuildWebFallbackLabel(query));
+            // ── 4. Web fallback (always shown at the bottom so the user can
+            //       search the web even when app shortcuts matched)
+            items.Add(BuildWebFallbackLabel(query));
 
             ResultList.ItemsSource = items;
             ResultList.Visibility  = Visibility.Visible;
@@ -997,17 +1001,17 @@ namespace FastBar
                     else if (shift) Process.Start(new ProcessStartInfo(p2) { UseShellExecute = true, Verb = "runas" });
                     else Launch(p2);
                 }
+                // ── Weather Result ──────────────────────────────────────────────
+                else if (selected.StartsWith("☁ "))
+                {
+                    // Just display weather info, no URL to open.
+                    HideWindow();
+                    return;
+                }
                 // ── Direct command / URL ──────────────────────────────────────
                 else if (!string.IsNullOrEmpty(query))
                 {
                     Launch(query);
-                }
-
-                // ── Weather Result ──────────────────────────────────────────────
-                if (selected.StartsWith("☁ "))
-                {
-                    HideWindow();
-                    return;
                 }
             }
             catch (Exception ex)
@@ -1107,7 +1111,10 @@ namespace FastBar
                 var match = System.Text.RegularExpressions.Regex.Match(input, @"^\s*([\d\.]+)\s*([a-zA-Z]+)\s+(?:to|in)\s+([a-zA-Z]+)\s*$");
                 if (!match.Success) return false;
 
-                if (!double.TryParse(match.Groups[1].Value, out double amount)) return false;
+                if (!double.TryParse(match.Groups[1].Value,
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out double amount)) return false;
                 string fromUnit = match.Groups[2].Value.ToLowerInvariant();
                 string toUnit = match.Groups[3].Value.ToLowerInvariant();
 
@@ -1203,8 +1210,9 @@ namespace FastBar
             {
                 double val = new MathParser(input).Parse();
                 if (double.IsNaN(val) || double.IsInfinity(val)) return false;
-                // Format: show integer if result is whole, otherwise up to 10 decimal places
-                result = val == Math.Truncate(val)
+                // Format: show integer if result is whole and fits in a long,
+                // otherwise use G10 to avoid scientific notation for typical values
+                result = val == Math.Truncate(val) && val >= long.MinValue && val <= long.MaxValue
                     ? ((long)val).ToString()
                     : val.ToString("G10");
                 return true;
